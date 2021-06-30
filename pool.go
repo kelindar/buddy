@@ -49,3 +49,8 @@ func (p *Pool) Store(value []byte) uint32 {
 func (p *Pool) Load(offset uint32) ([]byte, bool) {
 	panic("not implemented")
 }
+
+// Delete removes the entry and frees up the space used by it.
+func (p *Pool) Delete(offset uint32) bool {
+	panic("not implemented")
+}
