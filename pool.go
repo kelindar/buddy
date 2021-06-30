@@ -1,9 +1,9 @@
-// Copyright (c) Roman Atachiants and contributors. All rights reserved.
+// Copyright (c) Manoj Babu Katragadda and contributors. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for details.
 
 package buddy
 
-type Buddy struct {
+type Pool struct {
 	size int
 	tree []int
 	hash map[int]int
@@ -44,29 +44,29 @@ func max(a, b int) int {
 	return b
 }
 
-func NewBuddySystem(zsize int) *Buddy {
+func New(zsize int) *Pool {
 	if zsize < 1 || !isPowerOfTwo(zsize) {
 		return nil
 	}
 	nodesize := zsize
 
-	b := new(Buddy)
-	b.size = zsize
-	b.tree = make([]int, 2*zsize-1)
-	b.tree[0] = zsize
-	b.hash = make(map[int]int, zsize)
+	p := new(Pool)
+	p.size = zsize
+	p.tree = make([]int, 2*zsize-1)
+	p.tree[0] = zsize
+	p.hash = make(map[int]int, zsize)
 	for i := 1; i < 2*zsize-1; i++ {
 		if isPowerOfTwo(i + 1) {
 			nodesize /= 2
 		}
-		b.tree[i] = nodesize
+		p.tree[i] = nodesize
 	}
-	return b
+	return p
 }
 
-func (b *Buddy) Alloc(hash32 int, zsize int) (int, bool) {
+func (p *Pool) Alloc(hash32 int, zsize int) (int, bool) {
 	println(hash32)
-	if val, ok := b.hash[hash32]; ok {
+	if val, ok := p.hash[hash32]; ok {
 		return val, true
 	}
 
@@ -75,62 +75,62 @@ func (b *Buddy) Alloc(hash32 int, zsize int) (int, bool) {
 	}
 
 	if !isPowerOfTwo(zsize) {
-		zsize = fitPowerOfTwo(zsize, b.size)
+		zsize = fitPowerOfTwo(zsize, p.size)
 	}
 
 	index := 0
-	nodesize := b.size
-	if zsize > b.tree[index] {
+	nodesize := p.size
+	if zsize > p.tree[index] {
 		return -1, false
 	}
 	for ; nodesize != zsize; nodesize /= 2 {
-		if b.tree[leftNode(index)] >= zsize {
+		if p.tree[leftNode(index)] >= zsize {
 			index = leftNode(index)
 		} else {
 			index = rightNode(index)
 		}
 	}
-	b.tree[index] = 0
-	offset := (index+1)*nodesize - b.size
+	p.tree[index] = 0
+	offset := (index+1)*nodesize - p.size
 
 	for index > 0 {
 		index = (index - 1) / 2
-		b.tree[index] = max(b.tree[rightNode(index)], b.tree[leftNode(index)])
+		p.tree[index] = max(p.tree[rightNode(index)], p.tree[leftNode(index)])
 
 	}
-	b.hash[hash32] = offset
+	p.hash[hash32] = offset
 	return offset, true
 }
 
-func (b *Buddy) Free(hash32 int) {
-	if _, ok := b.hash[hash32]; !ok {
+func (p *Pool) Free(hash32 int) {
+	if _, ok := p.hash[hash32]; !ok {
 		return
 	}
-	offset := b.hash[hash32]
+	offset := p.hash[hash32]
 	nodesize := 1
-	index := offset + b.size - 1
-	for ; b.tree[index] > 0; index = (index - 1) / 2 {
+	index := offset + p.size - 1
+	for ; p.tree[index] > 0; index = (index - 1) / 2 {
 		nodesize *= 2
 		if index == 0 {
 			return
 		}
 	}
-	b.tree[index] = nodesize
+	p.tree[index] = nodesize
 
 	for ; index > 0; nodesize *= 2 {
 		index = (index - 1) / 2
 
-		if b.tree[leftNode(index)] == nodesize && b.tree[rightNode(index)] == nodesize {
-			b.tree[index] = nodesize * 2
+		if p.tree[leftNode(index)] == nodesize && p.tree[rightNode(index)] == nodesize {
+			p.tree[index] = nodesize * 2
 		} else {
-			b.tree[index] = max(b.tree[leftNode(index)], b.tree[rightNode(index)])
+			p.tree[index] = max(p.tree[leftNode(index)], p.tree[rightNode(index)])
 		}
 	}
-	delete(b.hash, hash32)
+	delete(p.hash, hash32)
 }
 
-func (b *Buddy) Find(hash32 int) (int, bool) {
-	if offset, ok := b.hash[hash32]; ok {
+func (p *Pool) Find(hash32 int) (int, bool) {
+	if offset, ok := p.hash[hash32]; ok {
 		return offset, true
 	}
 	return -1, false
