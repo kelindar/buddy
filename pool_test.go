@@ -33,7 +33,11 @@ func TestBuddy(t *testing.T) {
 	offset, ok := pool.Allocate(31223, 65)
 	assert.Equal(t, false, ok)
 	pool.Release(31221)
+	offset, ok = pool.Allocate(31225, 64)
 	pool.Release(31222)
+	offset, ok = pool.Allocate(31223, 65)
+	assert.Equal(t, false, ok)
+	pool.Release(31225)
 	offset, ok = pool.Allocate(31223, 65)
 	assert.Equal(t, uint32(0), offset)
 }
