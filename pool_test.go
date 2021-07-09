@@ -3,6 +3,7 @@ package buddy
 import (
 	crand "crypto/rand"
 	"fmt"
+	"github.com/stretchr/testify/assert"
 	"hash/crc32"
 	"math/rand"
 	"strings"
@@ -106,4 +107,90 @@ func (p *noop) Load(offset uint32) ([]byte, bool) {
 // Delete removes the entry and frees up the space used by it.
 func (p *noop) Delete(offset uint32) bool {
 	return true
+}
+
+// --------------------------- Pool -------------------------------
+
+// TestPoolAllocate tests the pool allocator
+func TestPoolAllocate(t *testing.T) {
+	pool := New(nil, 1024)
+	pool.memory = pool.alloc.Allocate(1024)
+	assert.Equal(t, pool.size, len(pool.memory))
+}
+
+// TestStore tests if the value is stored in pool memory.
+func TestStore(t *testing.T) {
+	// test invalid size
+	value := make([]byte, 2041)
+	pool := New(nil, 1024)
+	pool.memory = pool.alloc.Allocate(1024)
+	offset, ok := pool.Store(value)
+	assert.Equal(t, uint32(0), offset)
+	assert.False(t, ok)
+	// try to accommodate 514B, results offset 0.
+	value = make([]byte, 258)
+	offset, ok = pool.Store(value)
+	assert.Equal(t, uint32(0), offset)
+	assert.True(t, ok)
+	// try to accommodate 514B, results offset 0.
+	value = make([]byte, 258)
+	offset, ok = pool.Store(value)
+	assert.Equal(t, uint32(0), offset)
+	assert.True(t, ok)
+	// try to accommodate 14B, results offset 0 and false OOM
+	value = make([]byte, 45)
+	offset, ok = pool.Store(value)
+	assert.Equal(t, uint32(512), offset)
+	assert.True(t, ok)
+	// try to accommodate 14B, results offset 0 and false OOM
+	value = make([]byte, 31)
+	offset, ok = pool.Store(value)
+	assert.Equal(t, uint32(576), offset)
+	assert.True(t, ok)
+	// try to accommodate 14B, results offset 0 and false OOM
+	value = make([]byte, 231)
+	offset, ok = pool.Store(value)
+	assert.Equal(t, uint32(768), offset)
+	assert.True(t, ok)
+}
+
+// TestLoad tests if the value is returned at an offset
+func TestLoad(t *testing.T) {
+	// test invalid size
+	value := make([]byte, 2041)
+	pool := New(nil, 1024)
+	pool.memory = pool.alloc.Allocate(1024)
+	offset, ok := pool.Store(value)
+	assert.Equal(t, uint32(0), offset)
+	assert.False(t, ok)
+	// try to accommodate 514B, results offset 0.
+	value = make([]byte, 258)
+	offset, ok = pool.Store(value)
+	assert.Equal(t, uint32(0), offset)
+	assert.True(t, ok)
+	// try to accommodate 14B, results offset 0 and false OOM
+	value = make([]byte, 45)
+	offset, ok = pool.Store(value)
+	assert.Equal(t, uint32(512), offset)
+	assert.True(t, ok)
+	// try to load data at offset and verify checksum for input value and output value
+	var loadedVal []byte
+	loadedVal, ok = pool.Load(offset)
+	assert.Equal(t, crc32.ChecksumIEEE(value), crc32.ChecksumIEEE(loadedVal))
+	assert.True(t, ok)
+}
+
+// TestCapacityFor tests if the return value is just the next power of 2 greater/equal to given int
+func TestCapacityFor(t *testing.T) {
+	assert.Equal(t, uint32(4), capacityFor(3))
+	assert.NotEqual(t, uint32(8), capacityFor(3))
+	assert.Equal(t, uint32(256), capacityFor(256))
+	assert.Equal(t, uint32(256), capacityFor(253))
+}
+
+// TestMakeBuddies tests if the new bitmap level contains the bits set if the parent bit is set
+func TestMakeBuddies(t *testing.T) {
+	assert.Equal(t, uint32(15), makeBuddies(uint32(3), uint32(1)))
+	assert.Equal(t, uint32(51), makeBuddies(uint32(5), uint32(3)))
+	assert.Equal(t, uint32(12), makeBuddies(uint32(2), uint32(1)))
 }
