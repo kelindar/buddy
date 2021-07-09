@@ -180,6 +180,48 @@ func TestLoad(t *testing.T) {
 	assert.True(t, ok)
 }
 
+// TestDelete tests if the value is returned at an offset
+func TestDelete(t *testing.T) {
+	// test invalid size
+	value := make([]byte, 2041)
+	pool := New(nil, 1024)
+	pool.memory = pool.alloc.Allocate(1024)
+	offset, ok := pool.Store(value)
+	assert.Equal(t, uint32(0), offset)
+	assert.False(t, ok)
+	// try to accommodate 514B, results offset 0.
+	value = make([]byte, 258)
+	offset, ok = pool.Store(value)
+	assert.Equal(t, uint32(0), offset)
+	assert.True(t, ok)
+	// try to accommodate 514B, results offset 0.
+	value = make([]byte, 49)
+	offset, ok = pool.Store(value)
+	assert.Equal(t, uint32(512), offset)
+	assert.True(t, ok)
+	// try to accommodate 514B, results offset 0.
+	value = make([]byte, 189)
+	offset, ok = pool.Store(value)
+	assert.Equal(t, uint32(768), offset)
+	assert.True(t, ok)
+	// try to delete using value checksum
+	value = make([]byte, 189)
+	checksum := crc32.ChecksumIEEE(value)
+	assert.True(t, pool.Delete(checksum))
+	fmt.Println(pool.fill)
+	// try to delete using value checksum
+	value = make([]byte, 258)
+	checksum = crc32.ChecksumIEEE(value)
+	assert.True(t, pool.Delete(checksum))
+	fmt.Println(pool.fill)
+	// try to delete using value checksum
+	value = make([]byte, 49)
+	checksum = crc32.ChecksumIEEE(value)
+	assert.True(t, pool.Delete(checksum))
+	fmt.Println(pool.fill)
+	// TODO: this shld be [0,0,0,0,0] eventually
+}
+
 // TestCapacityFor tests if the return value is just the next power of 2 greater/equal to given int
 func TestCapacityFor(t *testing.T) {
 	assert.Equal(t, uint32(4), capacityFor(3))
@@ -192,5 +234,18 @@ func TestCapacityFor(t *testing.T) {
 func TestMakeBuddies(t *testing.T) {
 	assert.Equal(t, uint32(15), makeBuddies(uint32(3), uint32(1)))
 	assert.Equal(t, uint32(51), makeBuddies(uint32(5), uint32(3)))
-	assert.Equal(t, uint32(12), makeBuddies(uint32(2), uint32(1)))
+	assert.Equal(t, uint32(12), makeBuddies(uint32(2), uint32(1<<(1-1))))
+	assert.Equal(t, uint32(65280), makeBuddies(uint32(240), uint32(1<<(4-1))))
+}
+
+// TestExpTwo tests if the return value is exp of 2 for the given int
+func TestExpTwo(t *testing.T) {
+	assert.Equal(t, uint32(4), expTwo(uint32(16)))
+	assert.Equal(t, uint32(5), expTwo(uint32(32)))
+}
+
+// TestFindBuddy checks for the buddy bitOffset of given block
+func TestFindBuddy(t *testing.T) {
+	assert.Equal(t, uint32(5), findBuddy(uint32(4)))
+	assert.Equal(t, uint32(6), findBuddy(uint32(7)))
 }

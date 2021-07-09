@@ -32,9 +32,9 @@ func (goAlloc) Allocate(size int) []byte {
 type Pool struct {
 	alloc  Allocator
 	size   int
-	fill   []uint32
-	cache  map[uint32]uint32
-	memory []byte // The slabs of data
+	fill   []uint32          // TODO: use single ephemeral bitmap
+	cache  map[uint32]uint32 // TODO: use 32 bit int sorted list
+	memory []byte            // The slabs of data
 }
 
 // New creates a new buddy pool
@@ -95,7 +95,7 @@ func (p *Pool) Store(value []byte) (uint32, bool) {
 		} else {
 			i += 1
 			levelSize = levelSize >> 1
-			// check if the last level is full and return OOM if true
+			// check if the last level is full and return OOM if true else make space with buddies
 			if int(i) == len(p.fill) && p.fill[i-1] == 1<<(i)-1 {
 				return offset, false
 			} else if int(i) == len(p.fill) {
@@ -130,8 +130,47 @@ func (p *Pool) Load(offset uint32) ([]byte, bool) {
 }
 
 // Delete removes the entry and frees up the space used by it.
-func (p *Pool) Delete(offset uint32) bool {
-	panic("not implemented")
+func (p *Pool) Delete(hash32 uint32) bool {
+	if _, ok := p.cache[hash32]; !ok {
+		return false
+	}
+	offset, _ := p.cache[hash32]
+	bufferLen := binary.BigEndian.Uint32(p.memory[offset : offset+4])
+	blockSize := capacityFor(bufferLen + uint32(4))
+	var level uint32
+	if int(blockSize) == p.size {
+		level = 0
+	} else {
+
+		level = expTwo(uint32(p.size) / blockSize)
+	}
+	bitOffset := offset / blockSize
+	// loop to get parent bitOffset until buddy is free or parent is root
+	for {
+		if level == 0 {
+			break
+		}
+		if p.fill[level]&(1<<((1<<(level)-1)-findBuddy(bitOffset))) != 0 {
+			break
+		}
+		bitOffset /= 2
+		level -= 1
+	}
+	// set bitOffset to 0 at level
+	p.fill[level] = p.fill[level] & ((1<<(1<<(level)) - 1) ^ (1 << ((1 << level) - 1 - bitOffset)))
+	fmt.Println(level, offset)
+	for {
+		if int(level+1) == len(p.fill) {
+			break
+		}
+		p.fill[level+1] = makeBuddies(p.fill[level], 1<<(level))
+		level += 1
+	}
+
+	eraser := make([]byte, blockSize)
+	copy(p.memory[offset:offset+blockSize], eraser[:])
+	// TODO: remove entry from cache
+	return true
 }
 
 // ----------------------- Funcs ---------------------------------------
@@ -154,7 +193,7 @@ func makeBuddies(v uint32, level uint32) uint32 {
 	i := uint32(0)
 	r := uint32(0)
 	for {
-		if v&(1<<i) == (1 << i) {
+		if v&(1<<i) != 0 {
 			r |= (1 << (2 * i))
 			r |= (1 << ((2 * i) + 1))
 		}
@@ -164,4 +203,25 @@ func makeBuddies(v uint32, level uint32) uint32 {
 		}
 	}
 	return r
+}
+
+// findBuddy returns buddy bitOffset given a bitOffset
+func findBuddy(v uint32) uint32 {
+	if v%2 == 1 {
+		return v - 1
+	}
+	return v + 1
+}
+
+// expTwo returns the exponent of 2 of the given int except for 0
+func expTwo(v uint32) uint32 {
+	i := uint32(0)
+	for {
+		if v == 0 {
+			break
+		}
+		v = v >> 1
+		i += 1
+	}
+	return uint32(i - 1)
 }
