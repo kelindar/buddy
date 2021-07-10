@@ -14,16 +14,18 @@ func BenchmarkPool(b *testing.B) {
 	buffer := make([]byte, 1<<20)
 	crand.Read(buffer)
 
-	// Baseline implementaiton
 	noop := &noop{}
 	dict := &dict{
 		data: make(map[uint32][]byte, 1024),
 	}
+	pool := New(nil, 1024)
+	pool.memory = pool.alloc.Allocate(1024)
 
 	// Run benchmark suite
 	for _, chance := range []int32{10, 50, 90} {
 		run(b, chance, buffer, noop)
 		run(b, chance, buffer, dict)
+		run(b, chance, buffer, pool)
 	}
 }
 
@@ -41,7 +43,7 @@ func run(b *testing.B, chance int32, buffer []byte, impl pooler) {
 			case v < chance:
 				offset := rand.Int31n(int32(len(buffer)) - 5000)
 				value := buffer[offset : offset+rand.Int31n(1000)+1]
-				busy[rand.Int31n(int32(len(busy)))] = impl.Store(value)
+				busy[rand.Int31n(int32(len(busy)))], _ = impl.Store(value)
 			default:
 				offset := busy[rand.Int31n(int32(len(busy)))]
 				impl.Load(offset)
@@ -51,7 +53,7 @@ func run(b *testing.B, chance int32, buffer []byte, impl pooler) {
 }
 
 type pooler interface {
-	Store(value []byte) uint32
+	Store(value []byte) (uint32, bool)
 	Load(offset uint32) ([]byte, bool)
 	Delete(offset uint32) bool
 }
@@ -65,12 +67,12 @@ type dict struct {
 
 // Store stores a value in the pool and returns an offset to it. If the value
 // already exists, it returns an offset to an existing value instead.
-func (p *dict) Store(value []byte) uint32 {
+func (p *dict) Store(value []byte) (uint32, bool) {
 	hash := crc32.ChecksumIEEE(value)
 	if _, ok := p.data[hash]; !ok {
 		p.data[hash] = value
 	}
-	return hash
+	return hash, true
 }
 
 // LoadAt loads a value at a specified offset and returns the data and
@@ -94,8 +96,8 @@ type noop struct {
 
 // Store stores a value in the pool and returns an offset to it. If the value
 // already exists, it returns an offset to an existing value instead.
-func (p *noop) Store(value []byte) uint32 {
-	return 0
+func (p *noop) Store(value []byte) (uint32, bool) {
+	return 0, true
 }
 
 // LoadAt loads a value at a specified offset and returns the data and

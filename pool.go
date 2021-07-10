@@ -118,13 +118,16 @@ func (p *Pool) Store(value []byte) (uint32, bool) {
 		}
 	}
 	p.cache[hash32] = offset
-	fmt.Println("................................")
+	// fmt.Println("................................")
 	return offset, true
 }
 
 // LoadAt loads a value at a specified offset and returns the data and
 // whether it exists or not.
 func (p *Pool) Load(offset uint32) ([]byte, bool) {
+	if offset+4 > 1000 {
+		return nil, false
+	}
 	byteLength := binary.BigEndian.Uint32(p.memory[offset : offset+4])
 	return p.memory[offset+4 : offset+4+byteLength], true
 }
